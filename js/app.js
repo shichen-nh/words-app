@@ -5,6 +5,7 @@ import * as S from './sched.js';
 import * as V from './views.js';
 import { parseFile } from './parser.js';
 import { pickEncouragement } from './encourage.js';
+import { buildSuggestions } from './word-forms.js';
 
 const VERSION = '1.0.0';
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -645,7 +646,53 @@ async function openCheckinPage(justChecked = false) {
     total,
     broke: streak === 1 && total > 1,
   });
-  openLayer('checkin', () => V.checkinView({ streak, total, words, text, checkins, justChecked }));
+  const canExpand = !!(state.session && state.session.seen && state.session.seen.length);
+  openLayer('checkin', () =>
+    V.checkinView({ streak, total, words, text, checkins, justChecked, canExpand })
+  );
+}
+
+/* ---------- 学期总结：派生词 / 同义词 ---------- */
+
+async function openSummary() {
+  const s = state.session;
+  const deck = state.deck || (await DB.getActiveDeck());
+  if (!s || !deck) return;
+  const all = await DB.listWords(deck.id, { status: 'all' });
+  const byId = new Map(all.map((w) => [w.id, w]));
+  const learned = (s.seen || []).map((id) => byId.get(id)).filter(Boolean);
+  if (!learned.length) {
+    showToast('这一轮还没学过词');
+    return;
+  }
+  const items = buildSuggestions(learned, all);
+  state.summary = { deckId: deck.id, items, learnedCount: learned.length };
+  openLayer('summary', () => V.summaryView({ learnedCount: learned.length, items }));
+}
+
+async function addSuggestions() {
+  const sm = state.summary;
+  if (!sm) return;
+  const boxes = [...document.querySelectorAll('.sugg-check')].filter((b) => b.checked);
+  const picked = boxes.map((b) => sm.items[Number(b.dataset.i)]).filter(Boolean);
+  if (!picked.length) {
+    showToast('还没勾选任何词');
+    return;
+  }
+  const entries = picked.map((it) => ({
+    spelling: it.form,
+    pos_json: JSON.stringify([{ pos: it.basePos || '', cn: `${it.label}（${it.base}）` }]),
+    meaning_cn: `${it.label}（${it.base}）：${it.baseMeaning}`,
+    confidence: it.kind === 'syn' ? 3 : 1,
+  }));
+  try {
+    const r = await DB.bulkAddWords(sm.deckId, entries);
+    state._mg = null;
+    closeLayer();
+    showToast(`加了 ${r.added} 个词${r.skipped.length ? `，跳过 ${r.skipped.length} 个重复` : ''}`);
+  } catch (e) {
+    showToast(e?.message || '加入失败');
+  }
 }
 
 /* ---------------- 导入 ---------------- */
@@ -966,6 +1013,12 @@ async function onClick(e) {
     }
     case 'checkin-page':
       await openCheckinPage(false);
+      break;
+    case 'open-summary':
+      await openSummary();
+      break;
+    case 'add-suggestions':
+      await addSuggestions();
       break;
     case 'deck-filter': {
       if (!state.deckDetail) break;

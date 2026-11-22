@@ -1,5 +1,7 @@
 /* ================= words · 视图（纯 HTML 生成） ================= */
 
+import { termOf } from './solar-terms.js';
+
 export const esc = (s) =>
   String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
@@ -436,9 +438,66 @@ export function spellCardHTML(word, opts) {
   `;
 }
 
+/* ---------------- 学期总结：派生词 / 同义词 ---------------- */
+
+export function summaryView({ learnedCount, items }) {
+  const toAdd = items.map((it, i) => ({ ...it, i })).filter((it) => !it.inDeck);
+  const have = items.map((it, i) => ({ ...it, i })).filter((it) => it.inDeck);
+  const syns = toAdd.filter((it) => it.kind === 'syn');
+  const forms = toAdd.filter((it) => it.kind === 'form');
+
+  const row = (it) => `
+    <label class="sugg-row">
+      <input type="checkbox" class="sugg-check" data-i="${it.i}">
+      <span class="sugg-form">${esc(it.form)}</span>
+      <span class="sugg-tag">${esc(it.label)}</span>
+      <span class="sugg-from">← ${esc(it.base)}</span>
+    </label>`;
+
+  const group = (title, arr, hint) =>
+    arr.length
+      ? `<div class="section" style="padding:12px 14px">
+        <div class="section-title"><span>${esc(title)}</span><span>${arr.length} 个</span></div>
+        ${hint ? `<p class="sub" style="margin:0 0 6px">${esc(hint)}</p>` : ''}
+        ${arr.map(row).join('')}
+      </div>`
+      : '';
+
+  const haveHTML = have.length
+    ? `<div class="section" style="padding:12px 14px">
+      <div class="section-title"><span>你词库里已经有的</span><span>${have.length} 个</span></div>
+      <p class="sub" style="margin:0 0 6px">这些不用再加，只是让你知道它们之间的关系。</p>
+      ${have
+        .slice(0, 40)
+        .map(
+          (it) =>
+            `<div class="sugg-row plain"><span class="sugg-form">${esc(it.form)}</span><span class="sugg-tag">${esc(it.label)}</span><span class="sugg-from">← ${esc(it.base)}</span></div>`
+        )
+        .join('')}
+    </div>`
+    : '';
+
+  return `
+    <div class="layer-head">
+      <div class="side"><button class="icon-btn" data-act="close-layer">✕</button></div>
+      <div class="title">这一轮能扩展什么</div>
+      <div class="side"></div>
+    </div>
+    <div class="layer-body">
+      <p class="sub">本轮学了 <b>${learnedCount}</b> 个词，推出来 <b>${items.length}</b> 个相关的。勾选的会作为新词加进当前词库，明天进新词池。</p>
+      ${group('同义词', syns, '来自你导入文档里的「同义词」标注，是真词。')}
+      ${group('派生词', forms, '按构词规则推的，不一定都是真词，自己看一眼再勾。')}
+      ${haveHTML}
+    </div>
+    <div class="layer-foot">
+      <button class="btn btn-ghost" data-act="close-layer" style="flex:0 0 90px">不用了</button>
+      <button class="btn btn-primary" data-act="add-suggestions" style="flex:1">加入勾选的词</button>
+    </div>`;
+}
+
 /* ---------------- 打卡 ---------------- */
 
-export function checkinView({ streak, total, words, text, checkins, justChecked }) {
+export function checkinView({ streak, total, words, text, checkins, justChecked, canExpand }) {
   const map = new Set(checkins.map((c) => c.date));
   const now = new Date();
   const y = now.getFullYear();
@@ -468,6 +527,15 @@ export function checkinView({ streak, total, words, text, checkins, justChecked 
         <div class="checkin-title">${justChecked ? '今日完成' : '今天还没打卡'}</div>
         <div class="checkin-say">${esc(text)}</div>
       </div>
+      ${(() => {
+        const term = termOf();
+        if (!term) return '';
+        return `<div class="term-card">
+          <div class="term-top"><span class="term-name">${esc(term.name)}</span><span class="term-from">${esc(term.from)}</span></div>
+          <div class="term-poem">${esc(term.poem)}</div>
+          <div class="term-en">${esc(term.en)}</div>
+        </div>`;
+      })()}
       <div class="big-nums">
         <div class="box"><b>${streak}</b><span>连续天数</span></div>
         <div class="box"><b>${total}</b><span>累计天数</span></div>
@@ -480,6 +548,8 @@ export function checkinView({ streak, total, words, text, checkins, justChecked 
           ${cells.join('')}
         </div>
       </div>
+      ${canExpand ? `<button class="btn btn-ghost btn-block" data-act="open-summary" style="margin-top:18px">这一轮能扩展什么 →</button>
+      <p class="sub" style="text-align:center;margin-top:8px">从刚背的词里找出同义词和派生词</p>` : ''}
     </div>`;
 }
 

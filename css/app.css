@@ -325,6 +325,20 @@ a { color: var(--accent); text-decoration: none; }
 @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .checkin-title { font-size: 22px; font-weight: 700; }
 .checkin-say { color: var(--muted); font-size: 14px; margin-top: 10px; padding: 0 20px; line-height: 1.8; }
+.term-card {
+  margin: 22px 4px 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  background: var(--chip-2);
+  text-align: left;
+  animation: fadeUp .4s ease both;
+}
+.term-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.term-name { font-size: 16px; font-weight: 700; letter-spacing: 3px; }
+.term-from { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.term-poem { margin-top: 10px; font-size: 15px; line-height: 1.75; letter-spacing: .5px; }
+.term-en { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
 .big-nums { display: flex; gap: 12px; margin-top: 24px; }
 .big-nums .box { flex: 1; background: var(--chip-2); border: 1px solid var(--line); border-radius: 16px; padding: 16px; text-align: center; }
 .big-nums .box b { display: block; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -418,6 +432,19 @@ input[type="time"] {
   margin-bottom: 6px; transition: transform .12s;
 }
 .big-speak:active { transform: scale(.94); }
+
+/* ---------- 学期总结：派生词 / 同义词 ---------- */
+.sugg-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line);
+  font-size: 14px; cursor: pointer;
+}
+.sugg-row:last-child { border-bottom: 0; }
+.sugg-row.plain { cursor: default; opacity: .7; }
+.sugg-check { margin: 0; accent-color: var(--fg); flex: 0 0 auto; }
+.sugg-form { font-weight: 600; }
+.sugg-tag { font-size: 11px; color: var(--muted); background: var(--chip); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.sugg-from { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
 /* ---------- toast / busy ---------- */
 .toast {

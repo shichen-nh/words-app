@@ -1,5 +1,5 @@
 /* words · service worker（离线缓存） */
-const CACHE = 'words-v1.5';
+const CACHE = 'words-v1.6';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const ASSETS = [
   './js/views.js',
   './js/parser.js',
   './js/encourage.js',
+  './js/solar-terms.js',
+  './js/word-forms.js',
   './lib/pdf.min.js',
   './lib/pdf.worker.min.js',
   './icons/icon-192.png',
