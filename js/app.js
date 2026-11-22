@@ -298,6 +298,7 @@ function revealCard() {
   if (ans) ans.hidden = false;
   if (hint) hint.hidden = true;
   $('#answer-zone').classList.add('show');
+  say(state.card.spelling); // 揭示释义的同时读一遍
 }
 
 function updateProgress() {
@@ -311,6 +312,30 @@ function updateProgress() {
   if (counter) counter.textContent = `${Math.min(done + 1, total || done)} / ${total}`;
 }
 
+const CONS_NEED = 3;      // 答错后要连续答对几次才算过
+const CONS_MAX_SHOW = 10; // 同一个词一天最多出现几次，兜底防死循环
+
+/** 巩固期答对：只加连对计数，不动遗忘曲线的阶段 */
+function streakOnly(word, rating) {
+  const now = Date.now();
+  return {
+    word: { ...word, correct_streak: (word.correct_streak || 0) + 1, last_review_at: now },
+    log: {
+      word_id: word.id, deck_id: word.deck_id, rating,
+      prev_stage: word.stage, next_stage: word.stage, is_new: 0, at: now,
+    },
+    requeue: false,
+  };
+}
+
+/** 随机插到后面第 2~6 个位置：很快再见到它，但不是立刻 */
+function insertAhead(queue, id) {
+  const lo = Math.min(2, queue.length);
+  const hi = Math.min(6, queue.length);
+  const pos = hi <= lo ? queue.length : lo + Math.floor(Math.random() * (hi - lo + 1));
+  queue.splice(Math.min(pos, queue.length), 0, id);
+}
+
 async function answer(rating) {
   if (!state.revealed || !state.card || state.answering) return;
   state.answering = true;
@@ -318,7 +343,33 @@ async function answer(rating) {
   const s = state.session;
   const word = state.card;
   const before = { ...word };
-  const res = S.applyAnswer(word, rating);
+  if (!s.relearn) s.relearn = {};
+  if (!s.shows) s.shows = {};
+  s.shows[word.id] = (s.shows[word.id] || 0) + 1;
+
+  const consBefore = s.relearn[word.id] ? { ...s.relearn[word.id] } : null;
+  let res = null;
+  let requeue = false;
+
+  if (rating === 'unknown') {
+    // 答错 → 进巩固池，之后必须连续答对 3 次才走得掉
+    s.relearn[word.id] = { done: 0 };
+    res = S.applyAnswer(word, 'unknown');
+    requeue = true;
+  } else if (consBefore) {
+    // 巩固中答对
+    const cons = s.relearn[word.id];
+    cons.done += 1;
+    if (cons.done >= CONS_NEED || s.shows[word.id] >= CONS_MAX_SHOW) {
+      delete s.relearn[word.id];
+      res = S.applyAnswer(word, 'know');
+    } else {
+      res = streakOnly(word, 'know');
+      requeue = true;
+    }
+  } else {
+    res = S.applyAnswer(word, 'know');
+  }
 
   await DB.updateWord(res.word);
   const logId = await DB.addReviewLog(res.log);
@@ -329,17 +380,16 @@ async function answer(rating) {
     if (word.status === 'new') s.done.new++;
     else s.done.review++;
   }
-  if (s.queue[0] === word.id) s.queue.shift();
-  else {
-    const i = s.queue.indexOf(word.id);
-    if (i >= 0) s.queue.splice(i, 1);
-  }
-  if (res.requeue) s.queue.push(word.id);
+
+  const qi = s.queue.indexOf(word.id);
+  if (qi >= 0) s.queue.splice(qi, 1);
+  if (requeue) insertAhead(s.queue, word.id);
   S.saveSession(state.deck.id, s);
 
   state.lastAction = {
     before, logId, id: word.id, firstTime,
-    wasNew: word.status === 'new', requeued: res.requeue,
+    wasNew: word.status === 'new',
+    consBefore,
   };
 
   const cardEl = $('#study-card');
@@ -348,17 +398,16 @@ async function answer(rating) {
   await sleep(190);
 
   const ok = await nextCard();
-  if (!ok) {
-    await finishStudy();
-    return;
-  }
+  if (!ok) { await finishStudy(); return; }
 
-  showToast(
-    rating === 'know' ? `记住了：${word.spelling}` : `再记一次：${word.spelling}`,
-    '撤销',
-    undoAnswer,
-    1800
-  );
+  const left = s.relearn[word.id] ? CONS_NEED - s.relearn[word.id].done : 0;
+  const msg =
+    rating === 'unknown'
+      ? `再记一次：${word.spelling}`
+      : left > 0
+        ? `还差 ${left} 次：${word.spelling}`
+        : `记住了：${word.spelling}`;
+  showToast(msg, '撤销', undoAnswer, 1800);
 }
 
 async function undoAnswer() {
@@ -376,6 +425,10 @@ async function undoAnswer() {
     if (a.wasNew) s.done.new = Math.max(0, s.done.new - 1);
     else s.done.review = Math.max(0, s.done.review - 1);
   }
+  if (!s.relearn) s.relearn = {};
+  if (a.consBefore) s.relearn[a.id] = a.consBefore;
+  else delete s.relearn[a.id];
+
   s.queue = s.queue.filter((x) => x !== a.id);
   s.queue.unshift(a.id);
   S.saveSession(state.deck.id, s);

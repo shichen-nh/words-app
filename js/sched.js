@@ -154,6 +154,8 @@ export async function buildSession(deckId, settings, now = Date.now()) {
     targets: { review: due.length, new: newWords.length },
     done: { review: 0, new: 0 },
     seen: [],
+    relearn: {},   // 当天需要巩固的词：{ wordId: { done } }，连续答对 3 次才移出
+    shows: {},     // 每个词今天出现过几次（防止死循环）
     seconds: 0,
     startedAt: now,
     carriedOver: Math.max(0, (await DB.getDueWords(deckId, now, 99999)).length - due.length),
