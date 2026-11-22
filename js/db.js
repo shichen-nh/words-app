@@ -319,6 +319,8 @@ const SETTING_DEFAULTS = {
   fuzzy_mode: 0,
   spell_mode: 0,
   last_deck: 0,
+  answer_mode: 'recognize', // recognize | spelling | dictation | mix
+  hint_max: 2,              // 每张卡最多提示几个字母
 };
 
 export async function getSetting(key) {

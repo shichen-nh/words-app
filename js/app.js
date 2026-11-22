@@ -25,6 +25,10 @@ const state = {
   importDeckName: '',
   deckDetail: null,
   pending: null,
+  spellMode: false,   // 当前卡是不是默写/听写
+  spell: null,        // { hints: [], attempts, feedback }
+  _mg: null,          // 同义组缓存
+  _mgDeck: null,
 };
 
 /* ---------------- 基础工具 ---------------- */
@@ -266,10 +270,140 @@ async function nextCard() {
   state.card = card.word;
   state.revealed = false;
   state.answering = false;
+  state.spell = null;
+  state.spellMode = false;
   paintCard();
   updateProgress();
   if (Number(state.settings.auto_play)) say(card.word.spelling);
   return true;
+}
+
+/* ---------- 作答方式：认词 / 默写 / 听写 ---------- */
+
+function currentMode() {
+  const m = state.settings.answer_mode || 'recognize';
+  if (m === 'mix') return state.card && state.card.id % 2 === 0 ? 'spelling' : 'dictation';
+  return m;
+}
+
+/** 中文释义归一化：去掉词性前缀和括号里的同义词，用于找「意思完全一样」的词 */
+function normMeaning(cn) {
+  return String(cn || '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\b(n|v|vt|vi|adj|adv|prep|conj|pron|art|num|int|aux|phr|abbr)\.\s*/gi, '')
+    .replace(/[\s；;，,。.]/g, '')
+    .trim();
+}
+
+/** 找这个词库里「中文一模一样」的其他词，返回它们与当前词拼写不同的位置 */
+async function diffPositionsOf(word) {
+  try {
+    if (!state._mg || state._mgDeck !== state.deck.id) {
+      const all = await DB.listWords(state.deck.id, { status: 'all' });
+      const groups = {};
+      for (const w of all) {
+        const k = normMeaning(w.meaning_cn);
+        if (!k) continue;
+        (groups[k] = groups[k] || []).push(w);
+      }
+      state._mg = groups;
+      state._mgDeck = state.deck.id;
+    }
+    const key = normMeaning(word.meaning_cn);
+    const peers = (state._mg[key] || []).filter(
+      (w) => w.id !== word.id && w.spelling.toLowerCase() !== word.spelling.toLowerCase()
+    );
+    if (!peers.length) return [];
+    const a = word.spelling.toLowerCase();
+    const diff = new Set();
+    for (const p of peers) {
+      const b = p.spelling.toLowerCase();
+      for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) diff.add(i);
+    }
+    return [...diff].filter((i) => i < word.spelling.length);
+  } catch (_) {
+    return [];
+  }
+}
+
+function diffHTML(answer, input) {
+  const a = String(answer || '').toLowerCase();
+  const b = String(input || '').trim().toLowerCase();
+  let html = '';
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const ch = a[i] || '_';
+    const ok = b[i] === a[i];
+    html += `<span class="${ok ? 'ok' : 'bad'}">${V.esc(ch)}</span>`;
+  }
+  return html;
+}
+
+async function hintLetter() {
+  const sp = state.spell;
+  if (!sp || !state.card) return;
+  const max = Math.max(1, Number(state.settings.hint_max) || 2);
+  if (sp.hints.length >= max) return;
+  const word = state.card.spelling;
+  const candidates = [];
+  for (let i = 0; i < word.length; i++) {
+    if (/[A-Za-z]/.test(word[i]) && !sp.hints.includes(i)) candidates.push(i);
+  }
+  if (!candidates.length) return;
+
+  const diff = await diffPositionsOf(state.card);
+  let pos;
+  if (diff.length) {
+    // 有同义词：提示必须落在两者拼写不同的位置，否则等于没提示
+    const avail = candidates.filter((i) => diff.includes(i));
+    const pool = avail.length ? avail : candidates;
+    pos = pool[Math.floor(Math.random() * pool.length)];
+  } else {
+    pos = candidates[Math.floor(Math.random() * candidates.length)];
+  }
+  sp.hints.push(pos);
+  paintCard();
+  setTimeout(() => $('#spell-input')?.focus(), 10);
+}
+
+async function submitSpelling() {
+  const inp = $('#spell-input');
+  if (!inp || !state.card || state.answering) return;
+  const val = inp.value.trim();
+  if (!val) return;
+  const target = (state.card.spelling || '').trim();
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  if (norm(val) === norm(target)) {
+    inp.disabled = true;
+    state.spell = null;
+    await answer('know');
+    return;
+  }
+
+  state.spell = state.spell || { hints: [], attempts: 0, feedback: '' };
+  state.spell.attempts += 1;
+  if (state.spell.attempts >= 3) {
+    state.spell.feedback = `拼错 3 次。正确答案：<div class="diff">${diffHTML(target, target)}</div>`;
+    paintCard();
+    state.spell = null;
+    await sleep(700);
+    await answer('unknown');
+  } else {
+    state.spell.feedback = `不对，还剩 ${3 - state.spell.attempts} 次<div class="diff">${diffHTML(target, val)}</div>`;
+    paintCard();
+    setTimeout(() => {
+      const el = $('#spell-input');
+      if (el) { el.focus(); el.select(); }
+    }, 10);
+  }
+}
+
+async function skipSpell() {
+  if (!state.card || state.answering) return;
+  state.spell = null;
+  showToast(`答案：${state.card.spelling}`, null, null, 1400);
+  await answer('unknown');
 }
 
 function paintCard() {
@@ -280,13 +414,32 @@ function paintCard() {
   const s = state.session;
   const total = s.targets.new + s.targets.review;
   const done = s.done.new + s.done.review;
-  cardEl.innerHTML = V.studyCardHTML(state.card, {
-    accent: state.settings.accent,
-    revealed: state.revealed,
-    idx: done,
-    total,
-  });
-  $('#answer-zone').classList.toggle('show', state.revealed);
+
+  const mode = currentMode();
+  state.spellMode = mode === 'spelling' || mode === 'dictation';
+
+  if (state.spellMode) {
+    if (!state.spell) state.spell = { hints: [], attempts: 0, feedback: '' };
+    state.revealed = true; // 拼写模式不需要「揭示」这一步
+    cardEl.innerHTML = V.spellCardHTML(state.card, {
+      mode,
+      hintPositions: state.spell.hints,
+      hintCount: state.spell.hints.length,
+      hintMax: Math.max(1, Number(state.settings.hint_max) || 2),
+      feedback: state.spell.feedback,
+    });
+    $('#answer-zone').classList.remove('show');
+    if (mode === 'dictation') say(state.card.spelling);
+    setTimeout(() => $('#spell-input')?.focus(), 30);
+  } else {
+    cardEl.innerHTML = V.studyCardHTML(state.card, {
+      accent: state.settings.accent,
+      revealed: state.revealed,
+      idx: done,
+      total,
+    });
+    $('#answer-zone').classList.toggle('show', state.revealed);
+  }
 }
 
 function revealCard() {
@@ -550,6 +703,7 @@ async function confirmImport() {
     setBusy('', false);
     closeAllLayers();
     state.importEntries = null;
+    state._mg = null; // 词库变了，同义组缓存作废
     state.tab = 'today';
     await render();
     showToast(
@@ -714,7 +868,7 @@ function bindGestures() {
   const layer = $('#layer');
   layer.addEventListener('touchstart', (e) => {
     const card = e.target.closest('#study-card');
-    if (!card || !state.revealed) return;
+    if (!card || !state.revealed || state.spellMode) return;
     touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, el: card };
   }, { passive: true });
 
@@ -754,7 +908,7 @@ async function onClick(e) {
   // 卡片点击 → 揭示
   if (layerEl.contains(e.target) && !btn) {
     const card = e.target.closest('#study-card');
-    if (card) { revealCard(); return; }
+    if (card && !state.spellMode) { revealCard(); return; }
   }
   if (!btn) return;
   const act = btn.dataset.act;
@@ -784,6 +938,15 @@ async function onClick(e) {
       break;
     case 'unknown':
       await answer('unknown');
+      break;
+    case 'spell-submit':
+      await submitSpelling();
+      break;
+    case 'spell-hint':
+      await hintLetter();
+      break;
+    case 'spell-skip':
+      await skipSpell();
       break;
     case 'speak':
       if (state.card) say(state.card.spelling);
@@ -946,6 +1109,15 @@ function bindEvents() {
       console.error(err);
       showToast(err?.message || '出了点问题');
     });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const el = document.activeElement;
+    if (el && el.id === 'spell-input') {
+      e.preventDefault();
+      submitSpelling();
+    }
   });
 
   document.addEventListener('input', async (e) => {

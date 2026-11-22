@@ -285,6 +285,20 @@ export function meView({ settings, countsAll, version }) {
     </div>
 
     <div class="section">
+      <div class="section-title"><span>怎么背</span><span>三种方式共用同一条遗忘曲线</span></div>
+      <div class="row" style="display:block">
+        <div class="k" style="margin-bottom:8px">作答方式</div>
+        ${seg('answer_mode', settings.answer_mode, [
+          ['recognize', '认词'],
+          ['spelling', '默写'],
+          ['dictation', '听写'],
+          ['mix', '混合'],
+        ])}
+      </div>
+      <p class="sub" style="margin:8px 0 0">默写和听写会检查拼写，拼对才算「会了」。混合模式每张卡随机。</p>
+    </div>
+
+    <div class="section">
       <div class="section-title"><span>外观</span></div>
       <div class="row" style="display:block">
         <div class="k" style="margin-bottom:8px">主题</div>
@@ -367,6 +381,59 @@ export function studyCardHTML(word, { accent, revealed, idx, total }) {
       <div class="meta"><span>第 ${idx + 1} / ${total} 张</span><span>记忆持久度 ${Math.round((word.stage / 8) * 100)}%</span></div>
     </div>
     <div class="hint" ${revealed ? 'hidden' : ''}>点击卡片看释义</div>`;
+}
+
+/* ---------------- 默写 / 听写卡片 ---------------- */
+
+export function spellCardHTML(word, opts) {
+  const {
+    mode = 'spelling',
+    hintPositions = [],
+    hintCount = 0,
+    hintMax = 2,
+    feedback = '',
+    extra = '',
+  } = opts || {};
+  const spelling = word.spelling || '';
+  const letters = spelling.split('');
+  const len = letters.filter((c) => /[A-Za-z]/.test(c)).length;
+  const segs = posSegments(word);
+  const meaningHTML = segs.length
+    ? segs
+        .map(
+          (s) =>
+            `<div class="pos-row">${s.pos ? `<span class="pos">${esc(s.pos)}</span>` : ''}<span class="meaning">${esc(s.cn)}</span></div>`
+        )
+        .join('')
+    : `<div class="pos-row"><span class="meaning">${esc((word.meaning_cn || '').replace(/\n/g, '；'))}</span></div>`;
+
+  const slots = letters
+    .map((ch, i) => {
+      if (/[A-Za-z]/.test(ch)) {
+        const shown = hintPositions.includes(i);
+        return `<span class="slot${shown ? ' on' : ''}">${shown ? esc(ch) : '·'}</span>`;
+      }
+      if (ch === ' ') return `<span class="slot sep"></span>`;
+      return `<span class="slot dash">${esc(ch)}</span>`;
+    })
+    .join('');
+
+  return `
+    <button class="star ${word.is_favorite ? 'on' : ''}" data-act="star">${word.is_favorite ? '★' : '☆'}</button>
+    ${mode === 'dictation' ? `<button class="big-speak" data-act="speak" aria-label="发音">🔊</button>` : ''}
+    <div class="spell-meaning">${meaningHTML}</div>
+    <div class="spell-meta">${mode === 'dictation' ? '听发音，拼出这个单词' : '看中文，拼出这个单词'} · <b>${len}</b> 个字母</div>
+    <div class="slots">${slots}</div>
+    <div class="spell-box">
+      <input id="spell-input" class="spell-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="拼写…">
+      <button class="btn btn-know spell-go" data-act="spell-submit">确定</button>
+    </div>
+    <div class="spell-tools">
+      <button class="chip" data-act="spell-hint" ${hintCount >= hintMax ? 'disabled' : ''}>提示字母（${hintCount}/${hintMax}）</button>
+      <button class="chip" data-act="spell-skip">不会，看答案</button>
+    </div>
+    <div class="spell-feedback">${feedback}</div>
+  `;
 }
 
 /* ---------------- 打卡 ---------------- */
