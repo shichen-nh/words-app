@@ -7,7 +7,7 @@ import { parseFile } from './parser.js';
 import { pickEncouragement } from './encourage.js';
 import { buildSuggestions } from './word-forms.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const $ = (sel, root = document) => root.querySelector(sel);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -215,7 +215,32 @@ async function renderMe(view) {
     settings: state.settings,
     countsAll: { total, new: newCount, mastered },
     version: VERSION,
+    cacheVersion: await getCacheVersion(),
   });
+}
+
+/** 读 sw.js 里的缓存版本号，用来判断手机上跑的是不是最新版 */
+async function getCacheVersion() {
+  try {
+    const r = await fetch(`./sw.js?ts=${Date.now()}`, { cache: 'no-store' });
+    const t = await r.text();
+    const m = t.match(/CACHE\s*=\s*'([^']+)'/);
+    return m ? m[1].replace('words-', '') : '?';
+  } catch (_) {
+    return '?';
+  }
+}
+
+async function checkUpdate() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    }
+    showToast('已检查，关掉标签页重开就是最新版', null, null, 2600);
+  } catch (_) {
+    showToast('检查失败，看看网络');
+  }
 }
 
 /* ---------------- 学习 ---------------- */
@@ -1013,6 +1038,9 @@ async function onClick(e) {
     }
     case 'checkin-page':
       await openCheckinPage(false);
+      break;
+    case 'check-update':
+      await checkUpdate();
       break;
     case 'open-summary':
       await openSummary();

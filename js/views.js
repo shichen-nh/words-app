@@ -253,7 +253,7 @@ export function statsView({ countsAll, checkins, streak, dateNow, logsToday, for
 
 /* ---------------- 我的 / 设置 ---------------- */
 
-export function meView({ settings, countsAll, version }) {
+export function meView({ settings, countsAll, version, cacheVersion }) {
   const seg = (name, cur, opts) =>
     `<div class="seg">${opts
       .map(
@@ -264,7 +264,11 @@ export function meView({ settings, countsAll, version }) {
 
   return `
     <div class="h1">我的</div>
-    <div class="sub">words · v${version}</div>
+    <div class="sub">words · v${version} · 缓存 ${esc(cacheVersion || '?')}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-ghost" data-act="check-update" style="flex:1;padding:9px 0;font-size:13px">检查更新</button>
+      <span class="sub" style="flex:1;font-size:11px;line-height:1.5;text-align:left">更新不会自动生效，点这里之后再关掉重开</span>
+    </div>
 
     <div class="section" style="margin-top:18px">
       <div class="section-title"><span>每天背多少</span><span>来自未学的新词</span></div>

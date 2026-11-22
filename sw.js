@@ -1,5 +1,5 @@
 /* words · service worker（离线缓存） */
-const CACHE = 'words-v1.6';
+const CACHE = 'words-v1.7';
 const ASSETS = [
   './',
   './index.html',
