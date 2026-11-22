@@ -1,0 +1,82 @@
+{
+ "generatedAt": "2026-11-22T12:43:23.242Z",
+ "summary": {
+  "recall": 1,
+  "pos": 1,
+  "meaning": 1
+ },
+ "detail": [
+  {
+   "file": "01_一行一个.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "02_单词释义分行.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "03_带序号星号.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "04_带音标斜杠.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "05_方括号音标.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "06_表格四列.docx",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "07_一行多词性.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  },
+  {
+   "file": "08_脏文档带页码.txt",
+   "recall": 1,
+   "posRate": 1,
+   "meaningRate": 1,
+   "missing": [],
+   "extra": [],
+   "err": ""
+  }
+ ]
+}
