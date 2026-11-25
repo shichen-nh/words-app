@@ -6,6 +6,7 @@ import * as V from './views.js';
 import { parseFile } from './parser.js';
 import { pickEncouragement } from './encourage.js';
 import { buildSuggestions } from './word-forms.js';
+import { fetchExample } from './examples.js';
 
 const VERSION = '1.1.0';
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -28,6 +29,8 @@ const state = {
   pending: null,
   spellMode: false,   // 当前卡是不是默写/听写
   spell: null,        // { hints: [], attempts, feedback }
+  practice: false,    // 当前会话是不是专项练习（不写库）
+  practiceRandomCount: 20,
   _mg: null,          // 同义组缓存
   _mgDeck: null,
 };
@@ -281,11 +284,109 @@ async function addMore() {
   await nextCard();
 }
 
+/* ---------- 专项练习 ---------- */
+
+async function fillDeckExamples(deckId) {
+  if (!navigator.onLine) {
+    showToast('需要联网才能补例句');
+    return;
+  }
+  const words = await DB.listWords(deckId, { status: 'all' });
+  const need = words.filter((w) => !w.example);
+  if (!need.length) {
+    showToast('这个词库的例句都齐了');
+    return;
+  }
+  let filled = 0;
+  for (let i = 0; i < need.length; i++) {
+    setBusy(`补例句 ${i + 1}/${need.length}　成功 ${filled}`);
+    const r = await fetchExample(need[i].spelling);
+    if (r) {
+      await DB.updateWord({ ...need[i], example: r.example });
+      filled++;
+    }
+    await sleep(120);
+  }
+  setBusy('', false);
+  closeAllLayers();
+  await render();
+  showToast(`补了 ${filled} 条例句，其余词典里没有`);
+}
+
+async function openPracticePicker() {  const deck = await DB.getActiveDeck();
+  if (!deck) {
+    showToast('先导入一个词库');
+    return;
+  }
+  const [logs, due] = await Promise.all([
+    DB.logsBetween(S.startOfDay(), Date.now() + 1000),
+    DB.getDueWords(deck.id, Date.now(), 9999),
+  ]);
+  const newIds = new Set(
+    logs.filter((l) => l.is_new && l.deck_id === deck.id).map((l) => l.word_id)
+  );
+  state.practiceDeck = deck;
+  const newCount = newIds.size;
+  const dueCount = due.length;
+  openLayer('practice', () =>
+    V.practicePickerView({
+      newCount,
+      dueCount,
+      randomCount: state.practiceRandomCount,
+    })
+  );
+}
+
+async function startPractice(mode) {
+  const deck = state.practiceDeck || (await DB.getActiveDeck());
+  if (!deck) return;
+  const session = await S.buildPractice(deck.id, mode, state.practiceRandomCount);
+  if (!session.queue.length) {
+    showToast(mode === 'new_today' ? '今天还没学新词' : mode === 'due' ? '没有到期的词' : '学过的词还不够');
+    return;
+  }
+  state.session = session;
+  state.practice = true;
+  state.deck = deck;
+  state.sessionStart = Date.now();
+  state.spell = null;
+  state.spellMode = false;
+  closeAllLayers();
+  openLayer('study', () => V.studyShell());
+  await nextCard();
+}
+
+async function answerPractice(s, word, rating) {
+  const qi = s.queue.indexOf(word.id);
+  if (qi >= 0) s.queue.splice(qi, 1);
+  s.done.review = (s.done.review || 0) + 1;
+  if (rating === 'know') s.correct = (s.correct || 0) + 1;
+
+  const cardEl = $('#study-card');
+  if (cardEl) cardEl.classList.add(rating === 'know' ? 'swipe-right' : 'swipe-left');
+  updateProgress();
+  await sleep(190);
+
+  const ok = await nextCard();
+  if (!ok) await finishPractice();
+}
+
+async function finishPractice() {
+  const s = state.session;
+  const total = s ? s.total : 0;
+  const correct = s ? s.correct : 0;
+  const rate = total ? Math.round((correct / total) * 100) : 0;
+  state.practice = false;
+  closeAllLayers();
+  await render();
+  showToast(`练习完成：${correct}/${total} 会了（${rate}%）`, null, null, 3600);
+}
+
 async function nextCard() {
   const s = state.session;
   if (!s) return false;
   let card = await S.currentCard(state.deck.id, s);
-  if (!card) {
+  if (!card && !s.isPractice) {
     const n = await S.refill(state.deck.id, s);
     if (n) card = await S.currentCard(state.deck.id, s);
   }
@@ -521,6 +622,12 @@ async function answer(rating) {
 
   const s = state.session;
   const word = state.card;
+
+  if (s && s.isPractice) {
+    await answerPractice(s, word, rating);
+    return;
+  }
+
   const before = { ...word };
   if (!s.relearn) s.relearn = {};
   if (!s.shows) s.shows = {};
@@ -1041,6 +1148,19 @@ async function onClick(e) {
       break;
     case 'check-update':
       await checkUpdate();
+      break;
+    case 'practice-picker':
+      await openPracticePicker();
+      break;
+    case 'fill-examples':
+      await fillDeckExamples(Number(btn.dataset.id));
+      break;
+    case 'practice':
+      await startPractice(btn.dataset.mode);
+      break;
+    case 'practice-count':
+      state.practiceRandomCount = Number(btn.dataset.n) || 20;
+      paintLayer();
       break;
     case 'open-summary':
       await openSummary();

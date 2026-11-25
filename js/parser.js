@@ -346,12 +346,23 @@ function parseCells(cells) {
     : meaning;
 
   const conf = (spelling ? 1 : 0) + (phonetic ? 1 : 0) + (meaning_cn ? 1 : 0);
+
+  // 表格里如果有第 5 列（或更后面）是完整英文句子，当作例句
+  let example = '';
+  for (let i = 4; i < cells.length; i++) {
+    const c = String(cells[i] || '').trim();
+    if (c && /^[A-Za-z]/.test(c) && c.split(/\s+/).length >= 4 && !CN_CHAR.test(c)) {
+      example = c;
+      break;
+    }
+  }
+
   return {
     spelling,
     phonetic,
     meaning_cn,
     pos_json: JSON.stringify(posSegs),
-    example: '',
+    example,
     confidence: conf,
   };
 }

@@ -103,7 +103,15 @@ export function todayView({ deck, session, counts, dueCount, settings, streak, c
 
     <div class="start-wrap">${action}</div>
 
-    <div class="section" style="margin-top:26px">
+    <div class="practice-entry" data-act="practice-picker">
+      <div>
+        <div class="pe-title">专项练习</div>
+        <div class="pe-sub">今日新学 · 待复习 · 随机抽查</div>
+      </div>
+      <span class="pe-arrow">›</span>
+    </div>
+
+    <div class="section" style="margin-top:22px">
       <div class="section-title"><span>这个词库</span><span>已掌握 ${counts.mastered} 个</span></div>
       <div class="row"><span class="k">还没学</span><span class="v">${counts.new} 个</span></div>
       <div class="row"><span class="k">学习中</span><span class="v">${counts.learning} 个</span></div>
@@ -499,6 +507,43 @@ export function summaryView({ learnedCount, items }) {
     </div>`;
 }
 
+/* ---------------- 专项练习 ---------------- */
+
+export function practicePickerView({ newCount, dueCount, randomCount }) {
+  const opt = (mode, title, desc, n, disabled) => `
+    <button class="practice-opt ${disabled ? 'disabled' : ''}" data-act="practice" data-mode="${mode}" ${disabled ? 'disabled' : ''}>
+      <span class="po-title">${esc(title)}</span>
+      <span class="po-desc">${esc(desc)}</span>
+      <span class="po-n">${disabled ? '没有' : n + ' 个词'}</span>
+    </button>`;
+
+  return `
+    <div class="layer-head">
+      <div class="side"><button class="icon-btn" data-act="close-layer">✕</button></div>
+      <div class="title">专项练习</div>
+      <div class="side"></div>
+    </div>
+    <div class="layer-body">
+      <p class="sub" style="margin:0 0 14px;line-height:1.8">三种都行，练完不影响你的复习安排——不写进遗忘曲线。</p>
+      ${opt('new_today', '今日新学', '今天第一次学的词，趁热过一遍', newCount, !newCount)}
+      ${opt('due', '待复习', '今天该复习、还没复习的词', dueCount, !dueCount)}
+
+      <div class="section" style="padding:14px 16px;margin-top:6px">
+        <div class="section-title"><span>随机抽查</span><span>从学过的词里抽</span></div>
+        <p class="sub" style="margin:0 0 10px">自己定词数，这一轮不重复。</p>
+        <div class="seg" style="flex-wrap:wrap">
+          ${[10, 20, 30, 50]
+            .map(
+              (n) =>
+                `<button class="${randomCount === n ? 'on' : ''}" data-act="practice-count" data-n="${n}">${n}</button>`
+            )
+            .join('')}
+        </div>
+        <button class="btn btn-primary btn-block" data-act="practice" data-mode="random" style="margin-top:12px">开始抽查</button>
+      </div>
+    </div>`;
+}
+
 /* ---------------- 打卡 ---------------- */
 
 export function checkinView({ streak, total, words, text, checkins, justChecked, canExpand }) {
@@ -678,6 +723,8 @@ export function deckMenuView({ deck }) {
     </div>
     <div class="layer-body">
       <button class="btn btn-ghost btn-block" data-act="set-active" data-id="${deck.id}" style="margin-bottom:10px">设为当前词库</button>
+      <button class="btn btn-ghost btn-block" data-act="fill-examples" data-id="${deck.id}" style="margin-bottom:6px">联网补全例句</button>
+      <p class="sub" style="margin:0 0 14px;text-align:center">用免费词典接口，一条一条补，没有的会跳过</p>
       <button class="btn btn-ghost btn-block" data-act="reset-deck" data-id="${deck.id}" style="margin-bottom:10px">清空学习进度（保留单词）</button>
       <button class="btn btn-danger btn-block" data-act="delete-deck" data-id="${deck.id}">删除整个词库</button>
     </div>`;

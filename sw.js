@@ -1,5 +1,5 @@
-/* words · service worker（离线缓存） */
-const CACHE = 'words-v1.7';
+﻿/* words 路 service worker锛堢绾跨紦瀛橈級 */
+const CACHE = 'words-v1.8';
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const ASSETS = [
   './js/encourage.js',
   './js/solar-terms.js',
   './js/word-forms.js',
+  './js/examples.js',
   './lib/pdf.min.js',
   './lib/pdf.worker.min.js',
   './icons/icon-192.png',
@@ -43,7 +44,7 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(req).then((hit) => {
       if (hit) {
-        // 后台更新，下次拿新的
+        // 鍚庡彴鏇存柊锛屼笅娆℃嬁鏂扮殑
         fetch(req).then((res) => {
           if (res && res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));
         }).catch(() => {});
@@ -61,3 +62,4 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+

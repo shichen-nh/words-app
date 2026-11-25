@@ -187,6 +187,51 @@ export async function refill(deckId, session, now = Date.now()) {
   return extra.length;
 }
 
+/* ---------- 专项练习（不写调度） ---------- */
+
+/**
+ * @param mode 'new_today' 今日新学 | 'due' 待复习 | 'random' 随机抽查
+ * @param count 抽查词数（仅 random 用）
+ */
+export async function buildPractice(deckId, mode, count = 20, now = Date.now()) {
+  let words = [];
+
+  if (mode === 'new_today') {
+    const logs = await DB.logsBetween(startOfDay(now), now + 1000);
+    const ids = [
+      ...new Set(logs.filter((l) => l.is_new && l.deck_id === deckId).map((l) => l.word_id)),
+    ];
+    words = await DB.getWordsByIds(ids);
+  } else if (mode === 'due') {
+    words = await DB.getDueWords(deckId, now, 9999);
+  } else {
+    const learning = await DB.listWords(deckId, { status: 'learning' });
+    const mastered = await DB.listWords(deckId, { status: 'mastered' });
+    const pool = [...learning, ...mastered];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    words = pool.slice(0, Math.max(1, count));
+  }
+
+  return {
+    date: dateKey(now),
+    deckId,
+    mode,
+    isPractice: true,
+    queue: words.map((w) => w.id),
+    targets: { review: words.length, new: 0 },
+    done: { review: 0, new: 0 },
+    seen: [],
+    relearn: {},
+    shows: {},
+    correct: 0,
+    total: words.length,
+    startedAt: now,
+  };
+}
+
 /* ---------- 打卡 ---------- */
 
 export function computeStreak(checkins, todayKey = dateKey()) {
