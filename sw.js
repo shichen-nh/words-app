@@ -1,5 +1,5 @@
 ﻿/* words 路 service worker锛堢绾跨紦瀛橈級 */
-const CACHE = 'words-v1.8';
+const CACHE = 'words-v1.9';
 const ASSETS = [
   './',
   './index.html',
@@ -62,4 +62,5 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+
 
